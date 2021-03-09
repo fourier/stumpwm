@@ -25,12 +25,65 @@
    (geometry-changed-p :initform t :accessor tabbar-geometry-changed-p))
   (:documentation "A simple tab bar."))
 
-;; (defclass tabbar-tab ()
-;;   ((window :reader tabbar-tab-window)
-;;    (width :initarg :width :initform 16 :accessor tabbar-tab-width)
-;;    (height :initarg :height :initform 16 :accessor tabbar-tab-height)
-;;    (gcontext :initform nil :accessor tabbar-gcontext
-  
+(defclass tabbar-tab ()
+  ((window :initarg :window :reader tabbar-tab-window)
+   (stumpwm-window :initarg :stumpwm-window :reader tabbar-tab-stumpwm-window)
+   (gcontext :initarg :gcontext :accessor tabbar-tab-gc)   
+   (width :initarg :width :initform 16 :accessor tabbar-tab-width)
+   (height :initarg :height :initform 16 :accessor tabbar-tab-height))
+  (:documentation "A tab in a tab bar"))
+
+(defun create-tabbar-tab (parent-window gcontext stumpwm-window)
+  "Create an instance of the tabbar-bar class.
+PARENT-WINDOW - xlib parent window
+GCONTEXT - xlib GCONTEXT used to draw this tab
+STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
+  (make-instance
+   'tabbar-tab
+   :window 
+   (xlib:create-window
+    :parent       parent-window
+    :x            0 ;temporary value
+    :y            0 ;temporary value
+    :width        16 ;temporary value
+    :height       16 ;temporary value
+    :border-width *tabbar-border-width*
+    :border       (xlib:gcontext-foreground gcontext)
+    :background   (xlib:gcontext-background gcontext)
+    :event-mask   (xlib:make-event-mask :exposure
+                                        :leave-window
+                                        :button-press))
+   :gcontext gcontext
+   :stumpwm-window stumpwm-window))
+
+(defmethod tabbar-bar-refresh ((self tabbar-tab))
+  (with-slots (width height gcontext stumpwm-window window) self
+    (let* ((string         (window-title stumpwm-window))
+           (font           (xlib:gcontext-font gcontext))
+           (baseline-y     (xlib:font-ascent font))
+           (width          (xlib:text-extents font string))
+           (drawable-width (xlib:drawable-width window)))
+      (dformat 2 "text width = ~d drawable width = ~d~%"
+               width drawable-width)
+      (xlib:draw-image-glyphs
+       window gcontext
+       (+ (/ (- drawable-width width) 2)
+          *tabbar-margin*)			;start x
+       (+ baseline-y *tabbar-margin*)	;start y
+       string))))
+      
+
+(defmethod tabbar-bar-reposition ((self tabbar-tab) x y w h)
+  (with-slots (window width height) self
+    (xlib:with-state (window)
+      (setf (xlib:drawable-height window) h
+            height h
+            (xlib:drawable-width  window) w
+            width w
+            (xlib:drawable-x      window) x
+            (xlib:drawable-y      window) y))))
+
+
 (defun create-tabbar (parent-window text-color background-color text-font)
   (let ((new-tabbar (make-instance 'tabbar)))
     (with-slots (window gcontext) new-tabbar      
