@@ -422,7 +422,8 @@ converted to an atom is removed."
                   (+ x width) y))
 
 (define-stump-event-handler :exposure (window x y width height count)
-  (let (screen ml)
+  (dformat 2 "exposure: ~s~%" window)
+  (let (screen ml tb)
     (when (zerop count)
       (cond
         ((setf screen (find-screen window))
@@ -435,7 +436,9 @@ converted to an atom is removed."
              (redraw-current-message screen)))
         ((setf ml (find-mode-line-by-window window))
          (setf screen (mode-line-screen ml))
-         (redraw-mode-line ml t)))
+         (redraw-mode-line ml t))
+        ((setf tb (find-tabbar-by-window window))
+         (tabbar-refresh tb)))
       ;; Show the area.
       (when (and *debug-expose-events* screen)
         (draw-cross screen window x y width height)))))
