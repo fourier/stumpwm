@@ -133,7 +133,8 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
               (find xwin (tabbar-tabs *tabbar-current-tabbar*) :key #'tabbar-tab-window)))
     *tabbar-current-tabbar*))
 
-(defun update-tabbar ()
+(defun update-tabbar (&rest args)
+  (declare (ignore args))
   (when *tabbar-current-tabbar*
     (tabbar-recreate-tabs *tabbar-current-tabbar*)
     (tabbar-recompute-geometry *tabbar-current-tabbar*)
@@ -261,3 +262,9 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
   (if *tabbar-current-tabbar*
       (tabbar-hide)
       (tabbar-show)))
+
+
+;; trivial hooks
+;; (add-hook *new-window-hook* 'update-tabbar)
+;; (add-hook *destroy-window-hook* 'update-tabbar)
+;; (add-hook *focus-window-hook* 'update-tabbar)
