@@ -10,18 +10,18 @@
 (defparameter *tabbar-active-background-color* "gray60")
 (defparameter *tabbar-active-foreground-color* "gray98")
 (defparameter *tabbar-active-border-color* "gray98")
+(defparameter *tabbar-font-name* "terminus-bold-16")
 
 (defparameter *tabbar-current-tabbar* nil)
 
 (defclass tabbar ()
-  ((item-alist :initform nil 			 ;((item-window item-string))
-               :reader tabbar-item-alist)
+  ((tabs :initform nil
+         :reader tabbar-tabs)
    (window :initform nil :reader tabbar-window)
+   (active-gcontext :initform nil :reader tabbar-active-gc)
    (gcontext :initform nil :reader tabbar-gc)
    (width :initarg :width :initform 16 :accessor tabbar-width)
    (height :initarg :height :initform 16 :accessor tabbar-height)
-   (item-width :initarg :item-width :initform 0 :accessor item-width)
-   (item-height :initarg :item-height :initform (- 16 *tabbar-margin*)  :accessor item-height)
    (geometry-changed-p :initform t :accessor tabbar-geometry-changed-p))
   (:documentation "A simple tab bar."))
 
@@ -56,7 +56,8 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
    :gcontext gcontext
    :stumpwm-window stumpwm-window))
 
-(defmethod tabbar-bar-refresh ((self tabbar-tab))
+(defmethod tabbar-tab-refresh ((self tabbar-tab))
+  "Draw the contents of the tab"
   (with-slots (width height gcontext stumpwm-window window) self
     (let* ((string         (window-title stumpwm-window))
            (font           (xlib:gcontext-font gcontext))
@@ -73,7 +74,8 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
        string))))
       
 
-(defmethod tabbar-bar-reposition ((self tabbar-tab) x y w h)
+(defmethod tabbar-tab-reposition ((self tabbar-tab) x y w h)
+  "Set size and position of the tab"
   (with-slots (window width height) self
     (xlib:with-state (window)
       (setf (xlib:drawable-height window) h
@@ -84,13 +86,27 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
             (xlib:drawable-y      window) y))))
 
 
-(defun create-tabbar (parent-window text-color background-color text-font)
-  (let ((new-tabbar (make-instance 'tabbar)))
-    (with-slots (window gcontext) new-tabbar      
-      (setf gcontext ;; Create menu graphics context      
+(defun create-tabbar (parent-window)
+  (let ((new-tabbar (make-instance 'tabbar))
+        (text-font (xlib:open-font *display* *tabbar-font-name*))
+        (fg-color (alloc-color (current-screen)
+                               *tabbar-foreground-color*))
+        (bg-color (alloc-color (current-screen)
+                               *tabbar-background-color*))
+        (active-fg-color (alloc-color (current-screen)
+                               *tabbar-active-foreground-color*))
+        (active-bg-color (alloc-color (current-screen)
+                               *tabbar-active-background-color*)))
+    (with-slots (gcontext active-gcontext window) new-tabbar
+      (setf gcontext ;; Create passive tab and window graphics context      
             (xlib:create-gcontext :drawable   parent-window
-                                  :foreground text-color
-                                  :background background-color
+                                  :foreground fg-color
+                                  :background bg-color
+                                  :font       text-font)
+            active-gcontext
+            (xlib:create-gcontext :drawable   parent-window
+                                  :foreground active-fg-color
+                                  :background active-bg-color
                                   :font       text-font)
             window ;; Create tabbar main window
             (xlib:create-window
@@ -101,8 +117,8 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
              :width             16	;temporary value
              :height            16	;temporary value
              ;;             :border-width      *tabbar-border-width*
-             :border            text-color
-             :background        background-color
+             :border            fg-color
+             :background        bg-color
              :save-under        :on
              :override-redirect :on ;override window mgr when positioning
              :event-mask        (xlib:make-event-mask :leave-window :exposure))))
@@ -114,51 +130,44 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
   (when (and *tabbar-current-tabbar*
              (or 
               (eq (tabbar-window *tabbar-current-tabbar*) xwin)
-              (find xwin (tabbar-item-alist *tabbar-current-tabbar*) :key #'car)))
-                   
+              (find xwin (tabbar-tabs *tabbar-current-tabbar*) :key #'tabbar-tab-window)))
     *tabbar-current-tabbar*))
 
 
-(defmethod tabbar-set-item-alist ((self tabbar) &rest item-strings)
+(defmethod tabbar-create-tabs ((self tabbar))
   ;; ;; Assume the new items will change the tabbar's width and height
   (setf (tabbar-geometry-changed-p self) t)
-  (with-slots (item-alist) self
+  (with-slots (tabs) self
     ;; Destroy any existing item windows
-    (dolist (item item-alist)
-      (destroy-window (first item)))
-    ;; Add (item-window item-string) elements to item-alist
-    (setf item-alist
-          (loop for item in item-strings
-                collect
-                (list 
-                 (xlib:create-window
-                  :parent       (tabbar-window self)
-                  :x            0 ;temporary value
-                  :y            0 ;temporary value
-                  :width        16 ;temporary value
-                  :height       16 ;temporary value
-                  :border-width *tabbar-border-width*
-;;                  :border       (xlib:gcontext-foreground (tabbar-gc self))
-                  :background   (xlib:gcontext-background (tabbar-gc self))
-                  :event-mask   (xlib:make-event-mask :exposure
-                                                      :leave-window
-                                                      :button-press))
-                 item)))))
+    (dolist (tab tabs)
+      (destroy-window (tabbar-tab-window tab)))
+    ;; get the list of the windows in current group
+    (when-let (windows (group-windows (current-group)))
+      ;; Create corresponding tabs
+      (setf tabs
+            (loop for w in windows
+                  collect
+                  (create-tabbar-tab (tabbar-window self)
+                                     (if (eq w (current-window))
+                                         (tabbar-active-gc self)
+                                         (tabbar-gc self))
+                                     w)))))
+  (values))
 
 (defmethod tabbar-recompute-geometry ((self tabbar))
   "Recompute the geometry of tabbar and its items"
   (with-slots (window
                width
                height
-               item-height
-               item-width
-               item-alist
+               tabs
                gcontext
                geometry-changed-p)
       self
     (when geometry-changed-p
       (let* ((tabbar-font (xlib:gcontext-font gcontext))
-             (nitems      (length item-alist)))
+             item-height
+             item-width
+             (nitems      (length tabs)))
         ;; -- ascent (i.e. 12) -----
         ;;                              /\
         ;;                             /--\
@@ -182,18 +191,19 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
                 (xlib:drawable-width  window) width
                 (xlib:drawable-height window) (+ item-height
                                                  (* 2 *tabbar-border-width*))))
-        (loop for (w s) in item-alist
+        (loop for tab in tabs
               with x-offset = 0
               with x-step = (/ width nitems)
               do
-                 (xlib:with-state (w)
-                   (setf (xlib:drawable-height w) item-height                                               
-                         (xlib:drawable-width  w) (- item-width
-                                                     (* 2 *tabbar-border-width*))
-                         (xlib:drawable-x      w) x-offset
-                         (xlib:drawable-y      w) 0)
-                   (dformat 2 "x-offset ~d " x-offset)
-                   (incf x-offset x-step)))
+                 (tabbar-tab-reposition
+                  tab
+                  x-offset
+                  0
+                  (- item-width
+                     (* 2 *tabbar-border-width*))
+                  item-height)
+                 (dformat 2 "x-offset ~d " x-offset)
+                 (incf x-offset x-step))
         ;; map window
         (xlib:map-window window)
         ;; Map all item windows      
@@ -203,57 +213,17 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
 
 (defmethod tabbar-refresh ((self tabbar))
   "Draw the tabbar"
-  (with-slots (window
-               item-height
-               item-width
-               item-alist
-               gcontext)
-      self
-    (loop for (w s) in item-alist
-          with box-margin = *tabbar-margin*
-          with baseline-y = (xlib:font-ascent (xlib:gcontext-font gcontext))
-          for width = (xlib:text-extents (xlib:gcontext-font gcontext) s)
-          for drawable-width = (xlib:drawable-width w)
-          do
-             (dformat 2 "text width = ~d drawable width = ~d~%"
-                      width drawable-width)
-             (xlib:draw-image-glyphs
-              w gcontext
-              (+ (/ (- drawable-width width) 2)
-                 box-margin)			;start x
-              (+ baseline-y box-margin)	;start y
-              s))))
+  (dolist (tab (tabbar-tabs self))
+    (tabbar-tab-refresh tab)))
 
-
-(defun tabbar-start (&optional (font-name "terminus-bold-16"))
-  (when-let (windows (mapcar #'window-title (group-windows (current-group))))
-    (let* (
-           (display *display*)
-           (xscreen (stumpwm::screen-number (stumpwm::current-screen)))
-           (fg-color  (stumpwm::alloc-color (stumpwm::current-screen) *tabbar-foreground-color*))
-           (bg-color  (stumpwm::alloc-color (stumpwm::current-screen) *tabbar-background-color*))
-           (nice-font (xlib:OPEN-FONT display font-name))
-           ;; Create a tab bar as a child of the root window.
-           (tabbar (create-tabbar (xlib:screen-root xscreen)
-                                  fg-color bg-color nice-font)))
-      (apply #'tabbar-set-item-alist tabbar windows)
+(defun tabbar-start ()
+  (let* ((xscreen (stumpwm::screen-number (stumpwm::current-screen)))
+         ;; Create a tab bar as a child of the root window.
+         (tabbar (create-tabbar (xlib:screen-root xscreen))))
+      (tabbar-create-tabs tabbar)
       (tabbar-recompute-geometry tabbar)
       (tabbar-refresh tabbar)
-      ;; Bedevil the user until he picks a nice programming language
-      (unwind-protect
-           ;; (loop
-           ;;  ;; Determine the current root window position of the pointer
-           ;;  (multiple-value-bind (x y) (QUERY-POINTER (SCREEN-ROOT screen))
-
-           ;;    (let ((choice (menu-choose a-menu x y)))
-           ;;      (when (string-equal "Lisp" choice)
-           ;;        (return)))))
-           (progn
-             )
-        ;; (xlib:CLOSE-DISPLAY display)
-        nil
-        )
-      tabbar)))
+      tabbar))
 
 (defmethod tabbar-close ((self tabbar))
   (xlib:unmap-subwindows (tabbar-window self))
