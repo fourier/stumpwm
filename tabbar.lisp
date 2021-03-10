@@ -133,6 +133,11 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
               (find xwin (tabbar-tabs *tabbar-current-tabbar*) :key #'tabbar-tab-window)))
     *tabbar-current-tabbar*))
 
+(defun update-tabbar ()
+  (when *tabbar-current-tabbar*
+    (tabbar-recreate-tabs *tabbar-current-tabbar*)
+    (tabbar-recompute-geometry *tabbar-current-tabbar*)
+    (tabbar-refresh *tabbar-current-tabbar*)))
 
 (defmethod tabbar-recreate-tabs ((self tabbar))
   ;; ;; Assume the new items will change the tabbar's width and height
@@ -140,9 +145,12 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
   (with-slots (tabs) self
     ;; Destroy any existing item windows
     (dolist (tab tabs)
-      (destroy-window (tabbar-tab-window tab)))
+      (xlib:destroy-window (tabbar-tab-window tab)))
     ;; get the list of the windows in current group
-    (when-let (windows (group-windows (current-group)))
+    (when-let (windows
+               (sort
+                (copy-list (group-windows (current-group)))
+                #'< :key #'window-number))
       ;; Create corresponding tabs
       (setf tabs
             (loop for w in windows
