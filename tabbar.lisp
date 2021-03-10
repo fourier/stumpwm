@@ -68,7 +68,7 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
                width drawable-width)
       (xlib:draw-image-glyphs
        window gcontext
-       (+ (/ (- drawable-width width) 2)
+       (+ (round (/ (- drawable-width width) 2))
           *tabbar-margin*)			;start x
        (+ baseline-y *tabbar-margin*)	;start y
        string))))
@@ -134,7 +134,7 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
     *tabbar-current-tabbar*))
 
 
-(defmethod tabbar-create-tabs ((self tabbar))
+(defmethod tabbar-recreate-tabs ((self tabbar))
   ;; ;; Assume the new items will change the tabbar's width and height
   (setf (tabbar-geometry-changed-p self) t)
   (with-slots (tabs) self
@@ -178,7 +178,7 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
                              (xlib:font-descent tabbar-font)
                              (* 2 *tabbar-margin* ))
               item-width  (if (= 0 nitems) 0
-                              (/ width nitems)))
+                              (round (/ width nitems))))
                                         ;        )
         (dformat 2 "font-ascend ~d font-descent ~d item-height ~d"
                  (xlib:font-ascent tabbar-font)
@@ -193,7 +193,7 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
                                                  (* 2 *tabbar-border-width*))))
         (loop for tab in tabs
               with x-offset = 0
-              with x-step = (/ width nitems)
+              with x-step = (round (/ width nitems))
               do
                  (tabbar-tab-reposition
                   tab
@@ -220,7 +220,7 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
   (let* ((xscreen (stumpwm::screen-number (stumpwm::current-screen)))
          ;; Create a tab bar as a child of the root window.
          (tabbar (create-tabbar (xlib:screen-root xscreen))))
-      (tabbar-create-tabs tabbar)
+      (tabbar-recreate-tabs tabbar)
       (tabbar-recompute-geometry tabbar)
       (tabbar-refresh tabbar)
       tabbar))
@@ -246,3 +246,10 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
   (when *tabbar-current-tabbar*
     (tabbar-close *tabbar-current-tabbar*)
     (setf *tabbar-current-tabbar* nil)))
+
+(defcommand tabbar-toggle ()
+    ()
+  "Toggle tabbar."
+  (if *tabbar-current-tabbar*
+      (tabbar-hide)
+      (tabbar-show)))
