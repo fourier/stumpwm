@@ -615,6 +615,7 @@ the window in it's frame."
   (let ((button (decode-button-code code))
         (screen (find-screen window))
         (mode-line (find-mode-line-by-window window))
+        (tabbar (find-tabbar-by-window window))
         (win (find-window-by-parent window (top-windows))))
     (run-hook-with-args *click-hook* screen code x y)
     (cond
@@ -623,6 +624,8 @@ the window in it's frame."
        (run-hook-with-args *root-click-hook* screen code x y))
       (mode-line
        (run-hook-with-args *mode-line-click-hook* mode-line code x y))
+      (tabbar
+       (tabbar-handle-click-on-window tabbar window))
       (win
        (group-button-press (window-group win) button x y win))))
   ;; Pass click to client

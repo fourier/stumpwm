@@ -140,6 +140,18 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
     (tabbar-recompute-geometry *tabbar-current-tabbar*)
     (tabbar-refresh *tabbar-current-tabbar*)))
 
+(defmethod tabbar-handle-click-on-window ((self tabbar) window)
+  "Handle click event on a tab bar. WINDOW is a window
+(either tabbar or one of its tabs to receive event"
+  (when-let* ((found-tab
+               (find-if (lambda (tab)
+                          (eq window (tabbar-tab-window tab)))
+                        (tabbar-tabs self)))
+              (win (tabbar-tab-stumpwm-window found-tab)))
+    (raise-window win)
+    (focus-window win)
+    (update-tabbar)))
+
 (defmethod tabbar-recreate-tabs ((self tabbar))
   ;; ;; Assume the new items will change the tabbar's width and height
   (setf (tabbar-geometry-changed-p self) t)
