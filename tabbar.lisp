@@ -59,7 +59,7 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
 (defmethod tabbar-tab-refresh ((self tabbar-tab))
   "Draw the contents of the tab"
   (with-slots (width height gcontext stumpwm-window window) self
-    (let* ((string         (window-title stumpwm-window))
+    (let* ((string         (window-name stumpwm-window))
            (font           (xlib:gcontext-font gcontext))
            (baseline-y     (xlib:font-ascent font))
            (drawable-width (xlib:drawable-width window))
@@ -181,9 +181,7 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
       (xlib:destroy-window (tabbar-tab-window tab)))
     ;; get the list of the windows in current group
     (when-let (windows
-               (sort
-                (copy-list (group-windows (current-group)))
-                #'< :key #'window-number))
+               (sort-windows (current-group)))
       ;; Create corresponding tabs
       (setf tabs
             (loop for w in windows

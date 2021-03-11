@@ -327,8 +327,9 @@ converted to an atom is removed."
   (case atom
     (:wm_name
      (setf (window-title window) (xwin-name (window-xwin window)))
-     ;; Let the mode line know about the new name.
-     (update-all-mode-lines))
+     ;; Let the mode line and tab bar know about the new name.
+     (update-all-mode-lines)
+     (update-tabbar))
     (:wm_normal_hints
      (setf (window-normal-hints window) (get-normalized-normal-hints (window-xwin window))
            (window-type window) (xwin-type (window-xwin window)))
@@ -590,7 +591,8 @@ the window in it's frame."
     (let ((win (find-window window)))
       (when (and win (find win (top-windows)))
         (focus-all win)
-        (update-all-mode-lines)))))
+        (update-all-mode-lines)
+        (update-tabbar)))))
 
 (defun decode-button-code (code)
   "Translate the mouse button number into a more readable format"
