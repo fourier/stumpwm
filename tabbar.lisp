@@ -62,8 +62,11 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
     (let* ((string         (window-title stumpwm-window))
            (font           (xlib:gcontext-font gcontext))
            (baseline-y     (xlib:font-ascent font))
-           (width          (xlib:text-extents font string))
-           (drawable-width (xlib:drawable-width window)))
+           (drawable-width (xlib:drawable-width window))
+           (new-string     (string-trim-to-fit string font
+                                               (+ drawable-width
+                                                  (* 2 *tabbar-margin*))))
+           (width          (xlib:text-extents font new-string)))
       (dformat 2 "text width = ~d drawable width = ~d~%"
                width drawable-width)
       (xlib:draw-image-glyphs
@@ -71,8 +74,25 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
        (+ (round (/ (- drawable-width width) 2))
           *tabbar-margin*)			;start x
        (+ baseline-y *tabbar-margin*)	;start y
-       string))))
-      
+       new-string))))
+
+(defun string-trim-to-fit (string font desired-width)
+  "Replace suffix of the given STRING with dots (...)
+to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
+  (let ((width (xlib:text-extents font string))
+        (len (length string)))
+    (dformat 2 "string: ~a width ~a desired ~a~%"
+             string width desired-width)
+    (if (or (< width desired-width)     ; string fits
+            (string= string "..."))     ; nothing to trim
+        string                          ; just return the string
+        (string-trim-to-fit
+         ;; replace last 4 characters with "..."
+         (concatenate 'string
+                      (subseq string 0 (- len 4))
+                      "...")
+         font
+         desired-width))))
 
 (defmethod tabbar-tab-reposition ((self tabbar-tab) x y w h)
   "Set size and position of the tab"
