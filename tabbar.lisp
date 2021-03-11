@@ -293,8 +293,3 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
       (tabbar-hide)
       (tabbar-show)))
 
-
-;; trivial hooks
-;; (add-hook *new-window-hook* 'update-tabbar)
-;; (add-hook *destroy-window-hook* 'update-tabbar)
-;; (add-hook *focus-window-hook* 'update-tabbar)
