@@ -12,18 +12,27 @@
 (defparameter *tabbar-active-border-color* "gray98")
 (defparameter *tabbar-font-name* "terminus-bold-16")
 
-(defparameter *tabbar-current-tabbar* nil)
+(defparameter *tabbar-list-tabbars* nil
+  "List of the tab bars. There should be 1 tabbar per screen.")
 
 (defclass tabbar ()
   ((tabs :initform nil
          :reader tabbar-tabs)
    (window :initform nil :reader tabbar-window)
+   (screen :initarg :screen :reader tabbar-screen)
+   (head :initarg :head :reader tabbar-head)
+   (visible-p :accessor tabbar-visible-p :initform t)
    (active-gcontext :initform nil :reader tabbar-active-gc)
    (gcontext :initform nil :reader tabbar-gc)
    (width :initarg :width :initform 16 :accessor tabbar-width)
    (height :initarg :height :initform 16 :accessor tabbar-height)
    (geometry-changed-p :initform t :accessor tabbar-geometry-changed-p))
   (:documentation "A simple tab bar."))
+
+(defmethod (setf tabbar-head) (head (self tabbar))
+  (when head
+    (setf (slot-value self 'head) head)
+    (tabbar-recompute-geometry self)))
 
 (defclass tabbar-tab ()
   ((window :initarg :window :reader tabbar-tab-window)
@@ -106,16 +115,19 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
             (xlib:drawable-y      window) y))))
 
 
-(defun create-tabbar (parent-window)
-  (let ((new-tabbar (make-instance 'tabbar))
+(defun create-tabbar (parent-window screen)
+  (let ((new-tabbar
+          (make-instance 'tabbar
+                         :head (current-head)
+                         :screen screen))
         (text-font (xlib:open-font *display* *tabbar-font-name*))
-        (fg-color (alloc-color (current-screen)
+        (fg-color (alloc-color screen
                                *tabbar-foreground-color*))
-        (bg-color (alloc-color (current-screen)
+        (bg-color (alloc-color screen
                                *tabbar-background-color*))
-        (active-fg-color (alloc-color (current-screen)
+        (active-fg-color (alloc-color screen
                                *tabbar-active-foreground-color*))
-        (active-bg-color (alloc-color (current-screen)
+        (active-bg-color (alloc-color screen
                                *tabbar-active-background-color*)))
     (with-slots (gcontext active-gcontext window) new-tabbar
       (setf gcontext ;; Create passive tab and window graphics context      
@@ -142,23 +154,27 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
              :save-under        :on
              :override-redirect :on ;override window mgr when positioning
              :event-mask        (xlib:make-event-mask :leave-window :exposure))))
-    (setf *tabbar-current-tabbar* new-tabbar)
     (dformat 2 "Tabbar created: ~s~%" (tabbar-window new-tabbar))
     new-tabbar))
 
 (defun find-tabbar-by-window (xwin)
-  (when (and *tabbar-current-tabbar*
-             (or 
-              (eq (tabbar-window *tabbar-current-tabbar*) xwin)
-              (find xwin (tabbar-tabs *tabbar-current-tabbar*) :key #'tabbar-tab-window)))
-    *tabbar-current-tabbar*))
+  (find-if (lambda (tb)
+             (or
+              (eq (tabbar-window tb) xwin)
+              (find xwin (tabbar-tabs tb)
+                    :key #'tabbar-tab-window)))
+           *tabbar-list-tabbars*))
 
-(defun update-tabbar (&rest args)
-  (declare (ignore args))
-  (when *tabbar-current-tabbar*
-    (tabbar-recreate-tabs *tabbar-current-tabbar*)
-    (tabbar-recompute-geometry *tabbar-current-tabbar*)
-    (tabbar-refresh *tabbar-current-tabbar*)))
+(defun screen-tabbar (screen)
+  (find screen *tabbar-list-tabbars* :key #'tabbar-screen))
+
+(defun update-tabbar (&optional (screen (current-screen)))
+  "Update tabbar on a current head/screen.
+There could only be one tabbar per screen"
+  (when-let (tb (screen-tabbar screen))
+    (tabbar-recreate-tabs tb)
+    (tabbar-recompute-geometry tb)
+    (tabbar-refresh tb)))
 
 (defmethod tabbar-handle-click-on-window ((self tabbar) window)
   "Handle click event on a tab bar. WINDOW is a window
@@ -170,6 +186,7 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
               (win (tabbar-tab-stumpwm-window found-tab)))
     (raise-window win)
     (focus-window win)
+    ;; todo: solve this. need to supply screen
     (update-tabbar)))
 
 (defmethod tabbar-recreate-tabs ((self tabbar))
@@ -212,7 +229,7 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
         ;;                             /--\
         ;; -- baseline -------------  /    \
         ;; -- descent (i.e. 4) -----
-        (setf width (head-width (current-head))
+        (setf width (head-width (tabbar-head self))
               item-height (+ (xlib:font-ascent tabbar-font)
                              (xlib:font-descent tabbar-font)
                              (* 2 *tabbar-margin* ))
@@ -243,53 +260,59 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
                   item-height)
                  (dformat 2 "x-offset ~d " x-offset)
                  (incf x-offset x-step))
-        ;; map window
-        (xlib:map-window window)
-        ;; Map all item windows      
-        (xlib:map-subwindows window)
+        (when (tabbar-visible-p self)
+          ;; map window
+          (xlib:map-window window)
+          ;; Map all item windows      
+          (xlib:map-subwindows window))
         ;; save item geometry
         (setf geometry-changed-p nil)))))
 
 (defmethod tabbar-refresh ((self tabbar))
   "Draw the tabbar"
-  (dolist (tab (tabbar-tabs self))
-    (tabbar-tab-refresh tab)))
+  (when (tabbar-visible-p self)
+    (dolist (tab (tabbar-tabs self))
+      (tabbar-tab-refresh tab))))
 
-(defun tabbar-start ()
-  (let* ((xscreen (stumpwm::screen-number (stumpwm::current-screen)))
+;;; Create/Destroy
+
+(defun tabbar-create (&optional (screen (current-screen)))
+  (let* ((xscreen (screen-number screen))
          ;; Create a tab bar as a child of the root window.
-         (tabbar (create-tabbar (xlib:screen-root xscreen))))
-      (tabbar-recreate-tabs tabbar)
-      (tabbar-recompute-geometry tabbar)
-      (tabbar-refresh tabbar)
-      tabbar))
+         (tabbar (create-tabbar (xlib:screen-root xscreen)
+                                screen)))
+    (tabbar-recreate-tabs tabbar)
+    (tabbar-recompute-geometry tabbar)
+    (tabbar-refresh tabbar)
+    (push tabbar *tabbar-list-tabbars*)    
+    tabbar))
 
-(defmethod tabbar-close ((self tabbar))
+(defmethod tabbar-destroy ((self tabbar))
   (xlib:unmap-subwindows (tabbar-window self))
   (xlib:unmap-window (tabbar-window self))
-  (xlib:destroy-window (tabbar-window self)))
+  (dolist (w (tabbar-tabs self))
+    (xlib:destroy-window (tabbar-tab-window w)))
+  (xlib:destroy-window (tabbar-window self))
+  (xlib:free-gcontext (tabbar-gc self))
+  (xlib:free-gcontext (tabbar-active-gc self))
+  (setf *tabbar-list-tabbars* (remove self *tabbar-list-tabbars*)))
 
+(defun tabbar-toggle (screen)
+  (let ((tb (screen-tabbar screen)))
+    (cond ((and tb (tabbar-visible-p tb))
+           (setf (tabbar-visible-p tb) nil)
+           (xlib:unmap-window (tabbar-window tb)))
+          ((and tb (not (tabbar-visible-p tb)))
+           (setf (tabbar-visible-p tb) t)
+           (xlib:map-window (tabbar-window tb))
+           ;; Map all item windows      
+           (xlib:map-subwindows (tabbar-window tb)))
+          (t (tabbar-create screen)))))
 
-(defcommand tabbar-show ()
+;;; Commands
+
+(defcommand toggle-tabbar ()
     ()
-  "Show tabbar."
-  (when *tabbar-current-tabbar*
-    (tabbar-close *tabbar-current-tabbar*)
-    (setf *tabbar-current-tabbar* nil))
-  (tabbar-start))
-
-
-(defcommand tabbar-hide ()
-    ()
-  "Show tabbar."
-  (when *tabbar-current-tabbar*
-    (tabbar-close *tabbar-current-tabbar*)
-    (setf *tabbar-current-tabbar* nil)))
-
-(defcommand tabbar-toggle ()
-    ()
-  "Toggle tabbar."
-  (if *tabbar-current-tabbar*
-      (tabbar-hide)
-      (tabbar-show)))
+  "Toggle tabbar for current screen"
+  (tabbar-toggle (current-screen)))
 

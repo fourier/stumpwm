@@ -967,7 +967,7 @@ needed."
                             (or *current-event-time* 0))
        (update-mode-lines (window-screen window))
        ;; update tabbar as well so the active tab changes
-       (update-tabbar)
+       (update-tabbar (window-screen window))
        (run-hook-with-args *focus-window-hook* window cw))
       (t
        (screen-set-focus screen window)
@@ -979,7 +979,7 @@ needed."
        (move-window-to-head group window)
        (update-mode-lines (window-screen window))
        ;; update tabbar so the active window changes
-       (update-tabbar)
+       (update-tabbar (window-screen window))
        (run-hook-with-args *focus-window-hook* window cw)))))
 
 (defun xwin-kill (window)
