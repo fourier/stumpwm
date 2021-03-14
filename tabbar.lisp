@@ -11,6 +11,8 @@
 (defparameter *tabbar-active-foreground-color* "gray98")
 (defparameter *tabbar-active-border-color* "gray98")
 (defparameter *tabbar-font-name* "terminus-bold-16")
+(defparameter *tabbar-position* :top
+  "Position of the tab bar - :top or :bottom of the screen")
 
 (defparameter *tabbar-list-tabbars* nil
   "List of the tab bars. There should be 1 tabbar per screen.")
@@ -60,6 +62,7 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
                                                (+ drawable-width
                                                   (* 2 *tabbar-margin*))))
            (width          (xlib:text-extents font new-string)))
+      (dformat 2 "refresh tab ~s ~a~%" new-string self)
       (dformat 2 "text width = ~d drawable width = ~d~%"
                width drawable-width)
       (xlib:draw-image-glyphs
@@ -110,8 +113,7 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
    (active-gcontext :initform nil :reader tabbar-active-gc)
    (gcontext :initform nil :reader tabbar-gc)
    (width :initarg :width :initform 16 :accessor tabbar-width)
-   (height :initarg :height :initform 16 :accessor tabbar-height)
-   (geometry-changed-p :initform t :accessor tabbar-geometry-changed-p))
+   (height :initarg :height :initform 16 :accessor tabbar-height))
   (:documentation "A simple tab bar."))
 
 (defmethod (setf tabbar-head) (head (self tabbar))
@@ -165,7 +167,6 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
 
 (defmethod tabbar-recreate-tabs ((self tabbar))
   ;; ;; Assume the new items will change the tabbar's width and height
-  (setf (tabbar-geometry-changed-p self) t)
   (with-slots (tabs) self
     ;; Destroy any existing item windows
     (dolist (tab tabs)
@@ -190,52 +191,75 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
                width
                height
                tabs
-               gcontext
-               geometry-changed-p)
+               gcontext)
       self
-    (when geometry-changed-p
-      (let* ((tabbar-font (xlib:gcontext-font gcontext))
-             item-height
-             item-width
-             (nitems      (length tabs)))
-        ;; -- ascent (i.e. 12) -----
-        ;;                              /\
-        ;;                             /--\
-        ;; -- baseline -------------  /    \
-        ;; -- descent (i.e. 4) -----
-        (setf width (head-width (tabbar-head self))
-              item-height (+ (xlib:font-ascent tabbar-font)
-                             (xlib:font-descent tabbar-font)
-                             (* 2 *tabbar-margin* ))
-              item-width  (if (= 0 nitems) 0
-                              (round (/ width nitems))))
-                                        ;        )
-        (dformat 2 "font-ascend ~d font-descent ~d item-height ~d"
-                 (xlib:font-ascent tabbar-font)
-                 (xlib:font-descent tabbar-font)
-                 item-height)
-        (xlib:with-state (window)
-          (setf (xlib:drawable-x      window) (head-x (tabbar-head self))
-                ;; TODO: if we are positioned on top, adjust modeline height here, if present          
-                (xlib:drawable-y      window) 16
-                (xlib:drawable-width  window) width
-                (xlib:drawable-height window) (+ item-height
-                                                 (* 2 *tabbar-border-width*))))
-        (loop for tab in tabs
-              with x-offset = 0
-              with x-step = (round (/ width nitems))
-              do
-                 (tabbar-tab-reposition
-                  tab
-                  x-offset
-                  0
-                  (- item-width
-                     (* 2 *tabbar-border-width*))
-                  item-height)
-                 (dformat 2 "x-offset ~d " x-offset)
-                 (incf x-offset x-step))
-        ;; save item geometry
-        (setf geometry-changed-p nil)))))
+    (setf width (head-width (tabbar-head self)))
+    (let* ((ml (head-mode-line (tabbar-head self)))
+           ;; check if mode line is visible
+           (modeline-visible-p (and ml
+                                    (or 
+                                     (eq (mode-line-mode ml)
+                                         :stump)
+                                     (eq (mode-line-mode ml)
+                                         :visible))))
+           ;; offset to add/subtract from tabbar position
+           ;; corresponding to modeline height 
+           (y-offset (if (and modeline-visible-p
+                              (eq (mode-line-position ml)
+                                  *tabbar-position*))
+                         ;; only if the mode line and tabbar
+                         ;; are on the same side of the screen
+                         (xlib:with-state
+                             ((mode-line-window ml))
+                           (+ (xlib:drawable-height
+                               (mode-line-window ml))
+                              (* 2 (xlib:drawable-border-width (mode-line-window ml)))))
+                         0))
+           (tabbar-font (xlib:gcontext-font gcontext))
+           (nitems      (length tabs))           
+           ;; -- ascent (i.e. 12) -----
+           ;;                              /\
+           ;;                             /--\
+           ;; -- baseline -------------  /    \
+           ;; -- descent (i.e. 4) -----
+           (item-height
+             (+ (xlib:font-ascent tabbar-font)
+                           (xlib:font-descent tabbar-font)
+                           (* 2 *tabbar-margin* )))
+           (item-width
+             (if (= 0 nitems) 0
+                 (round (/ width nitems))))
+           (x-pos (head-x (tabbar-head self)))
+           (y-pos (if (eq *tabbar-position* :top)
+                  (+ (head-y (tabbar-head self)) y-offset)
+                  (- (+ (head-y (tabbar-head self))
+                        (head-height (tabbar-head self)))
+                     (* 2 *tabbar-border-width*)
+                     y-offset
+                     item-height)))
+           (height (+ item-height (* 2 *tabbar-border-width*))))
+      (dformat 2 "y-offset ~d h: ~d w: ~d x: ~d y: ~d~%"
+               y-offset height width x-pos y-pos)
+      (xlib:with-state (window)
+        (setf (xlib:drawable-x      window) x-pos
+              ;; TODO: if we are positioned on top, adjust modeline height here, if present          
+              (xlib:drawable-y      window) y-pos              
+              (xlib:drawable-width  window) width
+              (xlib:drawable-height window) height))
+      (loop for tab in tabs
+            with x-offset = 0
+            with x-step = (round (/ width nitems))
+            for tab-width = (- item-width
+                               (* 2 *tabbar-border-width*))
+            do
+               (tabbar-tab-reposition
+                tab
+                x-offset
+                0
+                tab-width
+                item-height)
+               (dformat 2 "tab: x-offset ~d w: ~d h: ~d~%" x-offset tab-width item-height)
+               (incf x-offset x-step)))))
 
 (defmethod tabbar-refresh ((self tabbar))
   "Draw the tabbar"
@@ -250,7 +274,9 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
         ;; map main windows
         (xlib:map-window (tabbar-window self))
         ;; Map all item windows      
-        (xlib:map-subwindows (tabbar-window self)))
+        (xlib:map-subwindows (tabbar-window self))
+        ;; show window contents
+        (tabbar-refresh self))
       (xlib:unmap-window (tabbar-window self))))
    
 ;;; Used by other modules of StumpWM
@@ -297,7 +323,7 @@ There could only be one tabbar per screen"
                                 screen)))
     (tabbar-recreate-tabs tabbar)
     (tabbar-recompute-geometry tabbar)
-    (tabbar-refresh tabbar)
+    (tabbar-show tabbar)
     (push tabbar *tabbar-list-tabbars*)    
     tabbar))
 

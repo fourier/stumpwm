@@ -263,6 +263,7 @@ timer.")
     (xlib:free-gcontext (mode-line-gc ml)))
   (setf *mode-lines* (remove ml *mode-lines*))
   (sync-mode-line ml)
+  (update-tabbar)
   (maybe-cancel-mode-line-timer))
 
 (defun destroy-all-mode-lines ()
