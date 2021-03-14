@@ -133,9 +133,9 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
         (bg-color (alloc-color screen
                                *tabbar-background-color*))
         (active-fg-color (alloc-color screen
-                               *tabbar-active-foreground-color*))
+                                      *tabbar-active-foreground-color*))
         (active-bg-color (alloc-color screen
-                               *tabbar-active-background-color*)))
+                                      *tabbar-active-background-color*)))
     (with-slots (gcontext active-gcontext window) new-tabbar
       (setf gcontext ;; Create passive tab and window graphics context      
             (xlib:create-gcontext :drawable   parent-window
@@ -155,8 +155,6 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
              :y                 0	;temporary value
              :width             16	;temporary value
              :height            16	;temporary value
-             ;;             :border-width      *tabbar-border-width*
-             :border            fg-color
              :background        bg-color
              :save-under        :on
              :override-redirect :on ;override window mgr when positioning
@@ -197,11 +195,9 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
     (let* ((ml (head-mode-line (tabbar-head self)))
            ;; check if mode line is visible
            (modeline-visible-p (and ml
-                                    (or 
+                                    (not
                                      (eq (mode-line-mode ml)
-                                         :stump)
-                                     (eq (mode-line-mode ml)
-                                         :visible))))
+                                         :hidden))))
            ;; offset to add/subtract from tabbar position
            ;; corresponding to modeline height 
            (y-offset (if (and modeline-visible-p
@@ -224,25 +220,24 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
            ;; -- descent (i.e. 4) -----
            (item-height
              (+ (xlib:font-ascent tabbar-font)
-                           (xlib:font-descent tabbar-font)
-                           (* 2 *tabbar-margin* )))
+                (xlib:font-descent tabbar-font)
+                (* 2 *tabbar-margin* )))
            (item-width
              (if (= 0 nitems) 0
                  (round (/ width nitems))))
            (x-pos (head-x (tabbar-head self)))
            (y-pos (if (eq *tabbar-position* :top)
-                  (+ (head-y (tabbar-head self)) y-offset)
-                  (- (+ (head-y (tabbar-head self))
-                        (head-height (tabbar-head self)))
-                     (* 2 *tabbar-border-width*)
-                     y-offset
-                     item-height)))
-           (height (+ item-height (* 2 *tabbar-border-width*))))
+                      (+ (head-y (tabbar-head self)) y-offset)
+                      (- (+ (head-y (tabbar-head self))
+                            (head-height (tabbar-head self)))
+                         (* 2 *tabbar-border-width*)
+                         y-offset
+                         item-height))))
+      (setf height (+ item-height (* 2 *tabbar-border-width*)))
       (dformat 2 "y-offset ~d h: ~d w: ~d x: ~d y: ~d~%"
                y-offset height width x-pos y-pos)
       (xlib:with-state (window)
         (setf (xlib:drawable-x      window) x-pos
-              ;; TODO: if we are positioned on top, adjust modeline height here, if present          
               (xlib:drawable-y      window) y-pos              
               (xlib:drawable-width  window) width
               (xlib:drawable-height window) height))
@@ -282,6 +277,8 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
 ;;; Used by other modules of StumpWM
 
 (defun find-tabbar-by-window (xwin)
+  "Find tabbar the X11 window XWIN belongs to
+(either main window or tab)"
   (find-if (lambda (tb)
              (or
               (eq (tabbar-window tb) xwin)
@@ -290,7 +287,14 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
            *tabbar-list-tabbars*))
 
 (defun screen-tabbar (screen)
+  "Find tabbar for the StumpWM SCREEN provided.
+Only 1 tabbar per screen"
   (find screen *tabbar-list-tabbars* :key #'tabbar-screen))
+
+(defun head-tabbar (head)
+  "Return the tabbar for the StumpWM HEAD provided if
+it is displayed on this head"
+  (find head *tabbar-list-tabbars* :key #'tabbar-head))
 
 (defun update-tabbar (&optional (screen (current-screen)))
   "Update tabbar on a current head/screen.
