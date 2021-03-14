@@ -263,7 +263,7 @@ timer.")
     (xlib:free-gcontext (mode-line-gc ml)))
   (setf *mode-lines* (remove ml *mode-lines*))
   (sync-mode-line ml)
-  (update-tabbar)
+  (update-all-tabbars)
   (maybe-cancel-mode-line-timer))
 
 (defun destroy-all-mode-lines ()
@@ -399,6 +399,9 @@ timer.")
            ;; Delete it
            (destroy-mode-line ml)))
         (make-mode-line screen head format))
+    ;; notify tabbar about mode line changes
+    (when-let (tb (head-tabbar head))
+      (update-tabbar tb))
     (dolist (group (screen-groups screen))
       (group-sync-head group head))))
 

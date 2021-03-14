@@ -819,7 +819,7 @@ needed."
     ;; quite often the modeline displays the window list, so update it
     (update-all-mode-lines)
     ;; update tabbar so the new tab is added
-    (update-tabbar)
+    (update-all-tabbars)
     ;; Run the new window hook on it.
     (run-hook-with-args *new-window-hook* window)
     window))
@@ -888,7 +888,7 @@ needed."
     ;; quite often the modeline displays the window list, so update it
     (update-all-mode-lines)
     ;; update tab bar to remove tab
-    (update-tabbar)
+    (update-all-tabbars)
     ;; Run the destroy hook on the window
     (run-hook-with-args *destroy-window-hook* window)))
 
@@ -967,7 +967,7 @@ needed."
                             (or *current-event-time* 0))
        (update-mode-lines (window-screen window))
        ;; update tabbar as well so the active tab changes
-       (update-tabbar (window-screen window))
+       (update-all-tabbars)
        (run-hook-with-args *focus-window-hook* window cw))
       (t
        (screen-set-focus screen window)
@@ -979,7 +979,7 @@ needed."
        (move-window-to-head group window)
        (update-mode-lines (window-screen window))
        ;; update tabbar so the active window changes
-       (update-tabbar (window-screen window))
+       (update-all-tabbars)
        (run-hook-with-args *focus-window-hook* window cw)))))
 
 (defun xwin-kill (window)

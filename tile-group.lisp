@@ -294,25 +294,38 @@
   "Return a Y for frame that doesn't overlap the mode-line."
   (let* ((head (frame-head group frame))
          (ml (head-mode-line head))
+         (tb (head-tabbar head))
          (head-y (frame-y head))
-         (rel-frame-y (- (frame-y frame) head-y)))
-    (if (and ml (not (eq (mode-line-mode ml) :hidden)))
-        (case (mode-line-position ml)
-          (:top
-           (+ head-y
-              (+ (mode-line-height ml) (round (* rel-frame-y (mode-line-factor ml))))))
-          (:bottom
-           (+ head-y
-              (round (* rel-frame-y (mode-line-factor ml))))))
-        (frame-y frame))))
+         (rel-frame-y (- (frame-y frame) head-y))
+         (display-y
+           (if (and ml (not (eq (mode-line-mode ml) :hidden)))
+               (case (mode-line-position ml)
+                 (:top
+                  (+ head-y
+                     (+ (mode-line-height ml) (round (* rel-frame-y (mode-line-factor ml))))))
+                 (:bottom
+                  (+ head-y
+                     (round (* rel-frame-y (mode-line-factor ml))))))
+               (frame-y frame))))
+    ;; adjust for tabbar
+    (when (and tb (tabbar-visible-p tb)
+               (eq (tabbar-position tb) :top))
+      (incf display-y (tabbar-height tb)))
+    display-y))
 
 (defun frame-display-height (group frame)
   "Return a HEIGHT for frame that doesn't overlap the mode-line."
   (let* ((head (frame-head group frame))
-         (ml (head-mode-line head)))
-    (if (and ml (not (eq (mode-line-mode ml) :hidden)))
-        (round (* (frame-height frame) (mode-line-factor ml)))
-        (frame-height frame))))
+         (ml (head-mode-line head))
+         (tb (head-tabbar head))
+         (height
+           (if (and ml (not (eq (mode-line-mode ml) :hidden)))
+               (round (* (frame-height frame) (mode-line-factor ml)))
+               (frame-height frame))))
+    ;; adjust for tabbar
+    (when (and tb (tabbar-visible-p tb))
+      (decf height (tabbar-height tb)))
+    height))
 
 (defun frame-intersect (f1 f2)
   "Return a new frame representing (only) the intersection of F1 and F2. WIDTH and HEIGHT will be <= 0 if there is no overlap"

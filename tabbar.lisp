@@ -113,20 +113,30 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
    (active-gcontext :initform nil :reader tabbar-active-gc)
    (gcontext :initform nil :reader tabbar-gc)
    (width :initarg :width :initform 16 :accessor tabbar-width)
-   (height :initarg :height :initform 16 :accessor tabbar-height))
+   (height :initarg :height :initform 16 :accessor tabbar-height)
+   (position :initarg :position :initform :top :reader tabbar-position))
   (:documentation "A simple tab bar."))
 
 (defmethod (setf tabbar-head) (head (self tabbar))
   "Setter for the tabbar head. Refreshes tabbar contents"
   (when head
     (setf (slot-value self 'head) head)
-    (update-tabbar)))
+    (update-tabbar self)))
+
+(defmethod (setf tabbar-position) (position (self tabbar))
+  "Setter for the tabbar head. Refreshes tabbar contents"
+  (setf (slot-value self 'position) position)
+  (update-tabbar self)
+  ;; change windows layout
+  (dolist (group (screen-groups (tabbar-screen self)))
+    (group-sync-head group (tabbar-head self))))
 
 (defun create-tabbar (parent-window screen)
   (let ((new-tabbar
           (make-instance 'tabbar
                          :head (current-head)
-                         :screen screen))
+                         :screen screen
+                         :position *tabbar-position*))
         (text-font (xlib:open-font *display* *tabbar-font-name*))
         (fg-color (alloc-color screen
                                *tabbar-foreground-color*))
@@ -202,7 +212,7 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
            ;; corresponding to modeline height 
            (y-offset (if (and modeline-visible-p
                               (eq (mode-line-position ml)
-                                  *tabbar-position*))
+                                  (tabbar-position self)))
                          ;; only if the mode line and tabbar
                          ;; are on the same side of the screen
                          (xlib:with-state
@@ -226,7 +236,7 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
              (if (= 0 nitems) 0
                  (round (/ width nitems))))
            (x-pos (head-x (tabbar-head self)))
-           (y-pos (if (eq *tabbar-position* :top)
+           (y-pos (if (eq (tabbar-position self) :top)
                       (+ (head-y (tabbar-head self)) y-offset)
                       (- (+ (head-y (tabbar-head self))
                             (head-height (tabbar-head self)))
@@ -296,14 +306,18 @@ Only 1 tabbar per screen"
 it is displayed on this head"
   (find head *tabbar-list-tabbars* :key #'tabbar-head))
 
-(defun update-tabbar (&optional (screen (current-screen)))
+(defun update-all-tabbars ()
+  "Update all tabbars on all screens"
+  (dolist (tb *tabbar-list-tabbars*)
+    (update-tabbar tb)))
+
+(defmethod update-tabbar ((self tabbar))
   "Update tabbar on a current head/screen.
 There could only be one tabbar per screen"
-  (when-let (tb (screen-tabbar screen))
-    (tabbar-recreate-tabs tb)
-    (tabbar-recompute-geometry tb)
-    (tabbar-refresh tb)
-    (tabbar-show tb)))
+  (tabbar-recreate-tabs self)
+  (tabbar-recompute-geometry self)
+  (tabbar-refresh self)
+  (tabbar-show self))
 
 (defmethod tabbar-handle-click-on-window ((self tabbar) window)
   "Handle click event on a tab bar. WINDOW is a window
@@ -315,8 +329,7 @@ There could only be one tabbar per screen"
               (win (tabbar-tab-stumpwm-window found-tab)))
     (raise-window win)
     (focus-window win)
-    ;; todo: solve this. need to supply screen
-    (update-tabbar)))
+    (update-tabbar self)))
 
 ;;; Create/Destroy/Toggle
 
@@ -348,7 +361,10 @@ There could only be one tabbar per screen"
           ((and tb (not (tabbar-visible-p tb)))
            (setf (tabbar-visible-p tb) t))
           (t (setf tb (tabbar-create screen))))
-    (tabbar-show tb)))
+    (tabbar-show tb)
+    (dolist (group (screen-groups screen))
+      (group-sync-head group (tabbar-head tb)))))
+
 
 ;;; Commands
 
