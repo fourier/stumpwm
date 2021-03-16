@@ -27,12 +27,13 @@
 (defclass tabbar-tab ()
   ((window :initarg :window :reader tabbar-tab-window)
    (stumpwm-window :initarg :stumpwm-window :reader tabbar-tab-stumpwm-window)
-   (gcontext :initarg :gcontext :accessor tabbar-tab-gc)   
+   (gcontext :initarg :gcontext :accessor tabbar-tab-gc)
+   (active-gcontext :initarg :active-gcontext :accessor tabbar-tab-active-gc)
    (width :initarg :width :initform 16 :accessor tabbar-tab-width)
    (height :initarg :height :initform 16 :accessor tabbar-tab-height))
   (:documentation "A tab in a tab bar"))
 
-(defun create-tabbar-tab (parent-window gcontext stumpwm-window)
+(defun create-tabbar-tab (parent-window gc active-gc stumpwm-window)
   "Create an instance of the tabbar-bar class.
 PARENT-WINDOW - xlib parent window
 GCONTEXT - xlib GCONTEXT used to draw this tab
@@ -47,33 +48,40 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
     :width        16 ;temporary value
     :height       16 ;temporary value
     :border-width *tabbar-border-width*
-    :border       (xlib:gcontext-foreground gcontext)
-    :background   (xlib:gcontext-background gcontext)
+    :border       (xlib:gcontext-foreground gc)
+    :background   (xlib:gcontext-background gc)
     :event-mask   (xlib:make-event-mask :exposure
                                         :leave-window
                                         :button-press))
-   :gcontext gcontext
+   :active-gcontext active-gc
+   :gcontext gc
    :stumpwm-window stumpwm-window))
 
 (defmethod tabbar-tab-refresh ((self tabbar-tab))
   "Draw the contents of the tab"
-  (with-slots (width height gcontext stumpwm-window window) self
-    (let* ((string         (window-name stumpwm-window))
-           (font           (xlib:gcontext-font gcontext))
+  (with-slots (width height gcontext active-gcontext stumpwm-window window) self
+    (let* ((active-p (eq (current-window) stumpwm-window))
+           (gc             (if active-p active-gcontext gcontext))
+           (string         (window-name stumpwm-window))
+           (font           (xlib:gcontext-font gc))
            (baseline-y     (xlib:font-ascent font))
            (drawable-width (xlib:drawable-width window))
            (new-string     (string-trim-to-fit string font
                                                (+ drawable-width
                                                   (* 2 *tabbar-margin*))))
            (width          (xlib:text-extents font new-string)))
-      (dformat 2 "refresh tab ~s ~a~%" new-string self)
+      (dformat 2 "refresh tab ~s [~a]~a~%" new-string (if active-p "active" "passive") self)
       (dformat 2 "text width = ~d drawable width = ~d~%"
                width drawable-width)
-      ;; first clear the prevoius text
+      ;; set the border and background
+      (xlib:with-state (window)
+        (setf (xlib:window-background window) (xlib:gcontext-background gc)
+              (xlib:window-border     window) (xlib:gcontext-foreground gc)))
+      ;; clear the prevoius text
       (xlib:clear-area window)
       ;; now draw the text
       (xlib:draw-image-glyphs
-       window gcontext
+       window gc
        (+ (round (/ (- drawable-width width) 2))
           *tabbar-margin*)			; start x
        (+ baseline-y *tabbar-margin*)	; start y
@@ -192,6 +200,7 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
           (tab-windows
             (mapcar #'tabbar-tab-stumpwm-window tabs)))
       ;; only destroy tabs when the window list has been changed
+      (dformat 2 "should recreate tabs? ~a~%" (not (equal windows tab-windows)))
       (unless (equal windows tab-windows)
         ;; Destroy any existing item windows
         (dolist (tab tabs)
@@ -201,9 +210,8 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
               (loop for w in windows
                     collect
                     (create-tabbar-tab (tabbar-window self)
-                                       (if (eq w (current-window))
-                                           (tabbar-active-gc self)
-                                           (tabbar-gc self))
+                                       (tabbar-gc self)
+                                       (tabbar-active-gc self)
                                        w))))
       ;; decide if we want to recompute geometry and show
       ;; the tab bar
@@ -287,8 +295,15 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
 (defmethod tabbar-refresh ((self tabbar))
   "Draw the tabbar"
   (when (tabbar-visible-p self)
-    (dolist (tab (tabbar-tabs self))
-      (tabbar-tab-refresh tab))))
+    (with-slots (tabbar-gc tabbar-active-gc tabs) self
+      (dolist (tab (tabbar-tabs self))
+        (setf (tabbar-tab-gc tab)
+              (if (eq (tabbar-tab-stumpwm-window tab)
+                      (current-window))
+                  (tabbar-active-gc self)
+                  (tabbar-gc self)))
+        ;; FIXME: active/passive borders and background
+      (tabbar-tab-refresh tab)))))
 
 (defmethod tabbar-show ((self tabbar))
   "Show/hide tabbar depending on a visible-p flag"
