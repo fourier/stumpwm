@@ -2,6 +2,7 @@
 
 ;; (setf *debug-level* 2)
 ;; (compile-file "events.lisp")
+;; (compile-file "group.lisp")
 ;; (compile-file "mode-line.lisp")
 ;; (compile-file "tile-group.lisp")
 ;; (compile-file "window.lisp")
@@ -38,6 +39,7 @@
 PARENT-WINDOW - xlib parent window
 GCONTEXT - xlib GCONTEXT used to draw this tab
 STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
+  (dformat 2 "create-tabbar-tab ~a~%" parent-window)  
   (make-instance
    'tabbar-tab
    :window 
@@ -59,6 +61,7 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
 
 (defmethod tabbar-tab-refresh ((self tabbar-tab))
   "Draw the contents of the tab"
+  (dformat 2 "tabbar-tab-refresh ~a~%" self)
   (with-slots (width height gcontext active-gcontext stumpwm-window window) self
     (let* ((active-p (eq (current-window) stumpwm-window))
            (gc             (if active-p active-gcontext gcontext))
@@ -107,6 +110,7 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
 
 (defmethod tabbar-tab-reposition ((self tabbar-tab) x y w h)
   "Set size and position of the tab"
+  (dformat 2 "tabbar-tab-reposition ~a~%" self)  
   (with-slots (window width height) self
     (xlib:with-state (window)
       (setf (xlib:drawable-height window) h
@@ -134,12 +138,14 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
 
 (defmethod (setf tabbar-head) (head (self tabbar))
   "Setter for the tabbar head. Refreshes tabbar contents"
+  (dformat 2 "setf tab-head ~a~%" self)
   (when head
     (setf (slot-value self 'head) head)
     (update-tabbar self)))
 
 (defmethod (setf tabbar-position) (position (self tabbar))
   "Setter for the tabbar head. Refreshes tabbar contents"
+  (dformat 2 "setf tab-position ~a~%" self)
   (setf (slot-value self 'position) position)
   (update-tabbar self)
   ;; change windows layout
@@ -147,6 +153,7 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
     (group-sync-head group (tabbar-head self))))
 
 (defun create-tabbar (parent-window screen)
+  (dformat 2 "create-tabbar ~a~%" parent-window)  
   (let ((new-tabbar
           (make-instance 'tabbar
                          :head (current-head)
@@ -191,6 +198,7 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
 
 (defmethod tabbar-recreate-tabs ((self tabbar))
   ;; Assume the new items will change the tabbar's width and height
+  (dformat 2 "tabbar-recreate-tabse ~a~%" self)    
   (with-slots (tabs) self
     ;; get the list of the windows in current group
     (let ((windows
@@ -220,6 +228,7 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
 
 (defmethod tabbar-recompute-geometry ((self tabbar))
   "Recompute the geometry of tabbar and its items"
+  (dformat 2 "tabbar-recompute-geometry ~a~%" self)
   (with-slots (window
                width
                height
@@ -294,6 +303,7 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
 
 (defmethod tabbar-refresh ((self tabbar))
   "Draw the tabbar"
+  (dformat 2 "tabbar-refresh ~a~%" self)      
   (when (tabbar-visible-p self)
     (with-slots (tabbar-gc tabbar-active-gc tabs) self
       (dolist (tab (tabbar-tabs self))
@@ -307,6 +317,7 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
 
 (defmethod tabbar-show ((self tabbar))
   "Show/hide tabbar depending on a visible-p flag"
+  (dformat 2 "tabbar-show ~a~%" self)      
   (if (tabbar-visible-p self)
       (progn
         ;; map main windows
@@ -322,6 +333,7 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
 (defun find-tabbar-by-window (xwin)
   "Find tabbar the X11 window XWIN belongs to
 (either main window or tab)"
+  (dformat 2 "find-tabbar-by-window ~a~%" xwin)    
   (find-if (lambda (tb)
              (or
               (eq (tabbar-window tb) xwin)
@@ -332,21 +344,25 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
 (defun screen-tabbar (screen)
   "Find tabbar for the StumpWM SCREEN provided.
 Only 1 tabbar per screen"
+  (dformat 2 "screen-tabbar ~a~%" screen)      
   (find screen *tabbar-list-tabbars* :key #'tabbar-screen))
 
 (defun head-tabbar (head)
   "Return the tabbar for the StumpWM HEAD provided if
 it is displayed on this head"
+  (dformat 2 "head-tabbar ~a~%" head)      
   (find head *tabbar-list-tabbars* :key #'tabbar-head))
 
 (defun update-all-tabbars ()
   "Update all tabbars on all screens"
+  (dformat 2 "update-all-tabbars~%")        
   (dolist (tb *tabbar-list-tabbars*)
     (update-tabbar tb)))
 
 (defmethod update-tabbar ((self tabbar))
   "Update tabbar on a current head/screen.
 There could only be one tabbar per screen"
+  (dformat 2 "update-tabbar ~a~%" self)
   (tabbar-recreate-tabs self)
   (tabbar-recompute-geometry self)
   (tabbar-refresh self)
@@ -355,7 +371,7 @@ There could only be one tabbar per screen"
 (defmethod tabbar-handle-click-on-window ((self tabbar) window)
   "Handle click event on a tab bar. WINDOW is a window
 (either tabbar or one of its tabs to receive event"
-  (dformat 2 "tabbar-handle-click-on-window~%")
+  (dformat 2 "tabbar-handle-click-on-window ~a~%" self)
   (when-let* ((found-tab
                (find-if (lambda (tab)
                           (eq window (tabbar-tab-window tab)))
@@ -368,6 +384,7 @@ There could only be one tabbar per screen"
 ;;; Create/Destroy/Toggle
 
 (defun tabbar-create (&optional (screen (current-screen)))
+  (dformat 2 "tabbar-create ~a~%" screen)
   (let* ((xscreen (screen-number screen))
          ;; Create a tab bar as a child of the root window.
          (tabbar (create-tabbar (xlib:screen-root xscreen)
@@ -379,6 +396,7 @@ There could only be one tabbar per screen"
     tabbar))
 
 (defmethod tabbar-destroy ((self tabbar))
+  (dformat 2 "tabbar-destroy ~a~%" self)
   (xlib:unmap-subwindows (tabbar-window self))
   (xlib:unmap-window (tabbar-window self))
   (dolist (w (tabbar-tabs self))
@@ -391,6 +409,7 @@ There could only be one tabbar per screen"
   )
 
 (defun tabbar-toggle (screen)
+  (dformat 2 "tabbar-toggle ~a~%" screen)  
   (let ((tb (screen-tabbar screen)))
     (if tb
         (tabbar-destroy tb)

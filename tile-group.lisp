@@ -153,7 +153,8 @@
       (focus-frame group frame)
       (unless (or (eq *mouse-focus-policy* :click)
                   (scroll-button-keyword-p button))
-        (update-all-mode-lines)))))
+        (update-all-mode-lines)
+        (update-all-tabbars)))))
 
 (defmethod group-button-press ((group tile-group) button x y (where window))
   (declare (ignore x y))
@@ -162,7 +163,8 @@
   (when (member *mouse-focus-policy* '(:click :sloppy))
     (focus-all where)
     (unless (scroll-button-keyword-p button)
-      (update-all-mode-lines))))
+      (update-all-mode-lines)
+      (update-all-tabbars))))
 
 (defmethod group-root-exposure ((group tile-group))
   (show-frame-outline group nil))
