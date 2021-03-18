@@ -63,7 +63,7 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
   "Draw the contents of the tab"
   (dformat 2 "tabbar-tab-refresh ~a~%" self)
   (with-slots (width height gcontext active-gcontext stumpwm-window window) self
-    (let* ((active-p (eq (current-window) stumpwm-window))
+    (let* ((active-p       (eq (current-window) stumpwm-window))
            (gc             (if active-p active-gcontext gcontext))
            (string         (window-name stumpwm-window))
            (font           (xlib:gcontext-font gc))
@@ -72,7 +72,9 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
            (new-string     (string-trim-to-fit string font
                                                (+ drawable-width
                                                   (* 2 *tabbar-margin*))))
-           (width          (xlib:text-extents font new-string)))
+           (list-string    (loop for c across new-string
+                                 collect (char-code c)))
+           (width          (xlib:text-extents font list-string)))
       (dformat 2 "refresh tab ~s [~a]~a~%" new-string (if active-p "active" "passive") self)
       (dformat 2 "text width = ~d drawable width = ~d~%"
                width drawable-width)
@@ -88,13 +90,16 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
        (+ (round (/ (- drawable-width width) 2))
           *tabbar-margin*)			; start x
        (+ baseline-y *tabbar-margin*)	; start y
-       new-string))))
+       list-string :size 16))))
+
 
 (defun string-trim-to-fit (string font desired-width)
   "Replace suffix of the given STRING with dots (...)
 to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
-  (let ((width (xlib:text-extents font string))
-        (len (length string)))
+  (let* ((list-string (loop for c across string
+                            collect (char-code c)))
+         (width (xlib:text-extents font list-string))
+         (len (length string)))
     (dformat 2 "string: ~a width ~a desired ~a~%"
              string width desired-width)
     (if (or (< width desired-width)     ; string fits
