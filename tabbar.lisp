@@ -47,8 +47,8 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
     :parent       parent-window
     :x            0 ;temporary value
     :y            0 ;temporary value
-    :width        16 ;temporary value
-    :height       16 ;temporary value
+    :width        1 ;temporary value
+    :height       1 ;temporary value
     :border-width *tabbar-border-width*
     :border       (xlib:gcontext-foreground gc)
     :background   (xlib:gcontext-background gc)
@@ -133,8 +133,8 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
    (visible-p :accessor tabbar-visible-p :initform t)
    (active-gcontext :initform nil :reader tabbar-active-gc)
    (gcontext :initform nil :reader tabbar-gc)
-   (width :initarg :width :initform 16 :accessor tabbar-width)
-   (height :initarg :height :initform 16 :accessor tabbar-height)
+   (width :initarg :width :initform 1 :accessor tabbar-width)
+   (height :initarg :height :initform 1 :accessor tabbar-height)
    (position :initarg :position :initform :top :reader tabbar-position))
   (:documentation "A simple tab bar."))
 
@@ -187,8 +187,8 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
              :class             :input-output
              :x                 0	;temporary value
              :y                 0	;temporary value
-             :width             16	;temporary value
-             :height            16	;temporary value
+             :width             1	;temporary value
+             :height            1	;temporary value
              :background        bg-color
              :save-under        :off
              :override-redirect :on ;override window mgr when positioning
@@ -399,8 +399,8 @@ There could only be one tabbar per screen"
 
 (defmethod tabbar-destroy ((self tabbar))
   (dformat 2 "tabbar-destroy ~a~%" self)
-  (xlib:unmap-subwindows (tabbar-window self))
-  (xlib:unmap-window (tabbar-window self))
+  ;; (xlib:unmap-subwindows (tabbar-window self))
+  ;; (xlib:unmap-window (tabbar-window self))
   (dolist (w (tabbar-tabs self))
     (xlib:destroy-window (tabbar-tab-window w)))
   (xlib:destroy-window (tabbar-window self))
