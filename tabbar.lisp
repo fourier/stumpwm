@@ -52,6 +52,7 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
     :border-width *tabbar-border-width*
     :border       (xlib:gcontext-foreground gc)
     :background   (xlib:gcontext-background gc)
+    :override-redirect :on
     :event-mask   (xlib:make-event-mask :exposure
                                         :leave-window
                                         :button-press))
@@ -319,16 +320,19 @@ to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
 
 (defmethod tabbar-show ((self tabbar))
   "Show/hide tabbar depending on a visible-p flag"
-  (dformat 2 "tabbar-show ~a~%" self)      
-  (if (tabbar-visible-p self)
-      (progn
-        ;; map main windows
-        (xlib:map-window (tabbar-window self))
-        ;; Map all item windows      
-        (xlib:map-subwindows (tabbar-window self))
-        ;; show window contents
-        (tabbar-refresh self))
-      (xlib:unmap-window (tabbar-window self))))
+  (dformat 2 "tabbar-show ~a~%" self)
+  (with-slots (window) self
+    (if (tabbar-visible-p self)
+        (progn
+          ;; map main windows
+          (xlib:map-window window)
+          ;; Set window priority
+          (setf (xlib:window-priority window) :below)
+          ;; Map all item windows      
+          (xlib:map-subwindows window)
+          ;; show window contents
+          (tabbar-refresh self))
+        (xlib:unmap-window window))))
    
 ;;; Used by other modules of StumpWM
 
