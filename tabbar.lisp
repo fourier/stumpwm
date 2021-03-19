@@ -72,9 +72,7 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
            (new-string     (string-trim-to-fit string font
                                                (+ drawable-width
                                                   (* 2 *tabbar-margin*))))
-           (list-string    (loop for c across new-string
-                                 collect (char-code c)))
-           (width          (xlib:text-extents font list-string)))
+           (width          (xlib:text-extents font new-string :translate #'translate-id)))
       (dformat 2 "refresh tab ~s [~a]~a~%" new-string (if active-p "active" "passive") self)
       (dformat 2 "text width = ~d drawable width = ~d~%"
                width drawable-width)
@@ -90,15 +88,14 @@ STUMPWM-WINDOW - instance of the STUMPWM:WINDOW class to draw"
        (+ (round (/ (- drawable-width width) 2))
           *tabbar-margin*)			; start x
        (+ baseline-y *tabbar-margin*)	; start y
-       list-string :size 16))))
+       new-string :size 16
+       :translate #'translate-id))))
 
 
 (defun string-trim-to-fit (string font desired-width)
   "Replace suffix of the given STRING with dots (...)
 to fit to DESIRED-WIDTH pixels when rendered with a FONT provided"
-  (let* ((list-string (loop for c across string
-                            collect (char-code c)))
-         (width (xlib:text-extents font list-string))
+  (let* ((width (xlib:text-extents font string :translate #'translate-id))
          (len (length string)))
     (dformat 2 "string: ~a width ~a desired ~a~%"
              string width desired-width)
