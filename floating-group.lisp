@@ -250,7 +250,11 @@
   (let* ((head (window-head window))
          (ml (head-mode-line head))
          (hx (head-x head))
-         (hy (if (null ml) 0 (mode-line-height ml)))
+         (hy (if (and ml
+                      (not (eq (mode-line-mode ml) :hidden))
+                      (eq (mode-line-position ml) :top))
+                 (mode-line-height ml)
+                 0))
          (w (- (head-width head)
                (* 2 *normal-border-width*)
                (* 2 *float-window-border*)))
